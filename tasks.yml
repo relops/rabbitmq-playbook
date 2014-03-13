@@ -1,0 +1,103 @@
+- hosts: rabbit
+  user: root
+  vars:
+    - ansible_python_interpreter: /usr/bin/python2
+    - rabbit_version: 3.2.4
+    - rabbit_tarball: rabbitmq-server-generic-unix-$rabbit_version.tar.gz
+    - rabbit_download: http://www.rabbitmq.com/releases/rabbitmq-server/v$rabbit_version/$rabbit_tarball
+    - rabbit_home: /opt/rabbitmq_server-3.2.4
+    - service_definition: $rabbit_home/rabbitmq.service
+    - service_target: /usr/lib/systemd/system/rabbitmq.service
+    - rabbit_service: /usr/lib/systemd/system/rabbitmq.service
+
+  handlers:
+    - name: chown rabbit
+      action: shell chown -R rabbit {{ rabbit_home }}
+
+  tasks:
+
+    - name: Set the hostname
+      action: shell hostnamectl set-hostname {{ inventory_hostname }}
+      tags:
+        - dns
+
+    - name: Set up DNS
+      action: template src=hosts.j2 dest=/etc/hosts
+      tags:
+        - dns
+
+    - name: Get some basic packages onto the box
+      action: pacman name={{ item }} state=installed
+      with_items:
+        - ntp
+        - gnu-netcat
+        - nginx
+        - lsof
+        - ack
+        - syslog-ng
+        - netcat
+        - dnsutils
+        - erlang-nox
+      tags:
+        - packages
+
+    - name: Ensure users exist
+      action: user name={{ item }} createhome=yes system=yes group=nobody
+      with_items:
+        - rabbit
+      tags:
+        - users
+        - rabbit
+
+    - name: Download Rabbit
+      get_url: url={{ rabbit_download }} dest=/opt mode=0440
+      tags:
+        - rabbit
+
+    - name: Unpack Rabbit
+      action: shell chdir=/opt tar xzvf {{ rabbit_tarball }} creates={{ rabbit_home }}
+      notify:
+        - chown rabbit
+      tags:
+        - unpack
+
+    - name: Template out generic service configuration files for Rabbit
+      action: template src={{ item.src }} dest={{ item.dest }} owner=rabbit
+      with_items:
+         - { src: rabbitmq.service.j2, dest: $rabbit_service }
+         - { src: enabled_plugins.j2,  dest: $rabbit_home/etc/rabbitmq/enabled_plugins }
+         - { src: nginx.conf.j2, dest: /etc/nginx/nginx.conf }
+      tags:
+        - config
+        - rabbit
+
+    - name: Template out cluster specific configuration files for Rabbit
+      action: template src={{ item.src }} dest={{ item.dest }} owner=rabbit
+      when: clustered
+      with_items:
+         - { src: erlang.cookie.j2, dest: /home/rabbit/.erlang.cookie }
+         - { src: rabbitmq.config.j2, dest: $rabbit_home/etc/rabbitmq/rabbitmq.config }
+      tags:
+        - config
+        - rabbit
+        - cluster
+
+    - name: Ensure the Rabbit dirs exist
+      action: file dest={{ rabbit_home }}{{ item }} state=directory owner=rabbit
+      with_items:
+        - /var/lib/rabbitmq/mnesia
+        - /var/log/rabbitmq
+      tags:
+        - rabbit
+        - dirs
+
+    - name: Enable Rabbit service
+      action: shell systemctl enable rabbitmq
+
+    - name: Enable nginx service
+      action: shell systemctl {{ item }} nginx
+      with_items:
+        - enable
+        - restart
+      tags:
+        - nginx

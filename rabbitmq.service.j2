@@ -1,0 +1,13 @@
+[Unit]
+Description=RabbitMQ
+After=syslog.target
+
+[Service]
+Type=simple
+User=rabbit
+WorkingDirectory={{ rabbit_home }}
+Environment=RABBITMQ_HOME={{ rabbit_home }}
+ExecStart=-{{ rabbit_home }}/sbin/rabbitmq-server
+
+[Install]
+WantedBy=multi-user.target
