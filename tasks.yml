@@ -2,10 +2,10 @@
   user: root
   vars:
     - ansible_python_interpreter: /usr/bin/python2
-    - rabbit_version: 3.2.4
+    - rabbit_version: 3.3.0
     - rabbit_tarball: rabbitmq-server-generic-unix-$rabbit_version.tar.gz
     - rabbit_download: http://www.rabbitmq.com/releases/rabbitmq-server/v$rabbit_version/$rabbit_tarball
-    - rabbit_home: /opt/rabbitmq_server-3.2.4
+    - rabbit_home: /opt/rabbitmq_server-$rabbit_version
     - service_definition: $rabbit_home/rabbitmq.service
     - service_target: /usr/lib/systemd/system/rabbitmq.service
     - rabbit_service: /usr/lib/systemd/system/rabbitmq.service
@@ -27,7 +27,7 @@
         - dns
 
     - name: Get some basic packages onto the box
-      action: pacman name={{ item }} state=installed
+      action: pacman name={{ item }} state=installed update_cache=yes
       with_items:
         - ntp
         - gnu-netcat
@@ -60,6 +60,7 @@
         - chown rabbit
       tags:
         - unpack
+        - rabbit
 
     - name: Template out generic service configuration files for Rabbit
       action: template src={{ item.src }} dest={{ item.dest }} owner=rabbit
